@@ -1,0 +1,702 @@
+Prosper Loan Data Analysis by John Lauritzen
+========================================================
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+library(ggplot2)
+library(GGally)
+library(scales)
+library(memisc)
+library(gridExtra)
+library(RColorBrewer)
+library(dplyr)
+library(reshape2)
+library(lubridate)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Load_the_Data}
+pl <- read.csv('prosperLoanData.csv')
+# Formatting dates to be recognized as dates
+pl$ListingCreationDate <- strptime(pl$ListingCreationDate,
+                                   format = "%Y-%m-%d %H:%M:%S")
+pl$ClosedDate <- strptime(pl$ClosedDate, format = "%Y-%m-%d %H:%M:%S")
+pl$DateCreditPulled <- strptime(pl$DateCreditPulled, 
+                                format = "%Y-%m-%d %H:%M:%S")
+pl$FirstRecordedCreditLine <- strptime(pl$FirstRecordedCreditLine, 
+                                       format = "%Y-%m-%d %H:%M:%S")
+pl$LoanOriginationDate <- strptime(pl$LoanOriginationDate, 
+                                   format = "%Y-%m-%d %H:%M:%S")
+# Factoring variables that have an inherent order
+pl$CreditGrade <- factor(pl$CreditGrade)
+pl$ProsperRating..numeric. <- factor(pl$ProsperRating..numeric.)
+pl$ProsperScore <- factor(pl$ProsperScore)
+pl$IncomeRange <- factor(pl$IncomeRange)
+pl$Term <- factor(pl$Term)
+# Specifying ordered factoring for variables without inherent order
+pl$IncomeRange <- ordered(pl$IncomeRange, levels = c("Not employed", "$0",
+                                                     "$1-24,999",
+                                                     "$25,000-49,999",
+                                                     "$50,000-74,999",
+                                                     "$75,000-99,999",
+                                                     "$100,000+",
+                                                     "Not displayed"))
+pl$ProsperRating..Alpha. <- ordered(pl$ProsperRating..Alpha.,
+                                    levels = c("", "HR", "E", "D", "C", "B",
+                                               "A", "AA"))
+pl$CreditGrade <- ordered(pl$CreditGrade, levels = c("", "HR", "E", "D", "C",
+                                                     "B", "A", "AA"))
+# Creating new variables for ease of use in plotting
+pl$AverageCreditScore <- (pl$CreditScoreRangeLower +
+                                          pl$CreditScoreRangeUpper)/2
+pl$LoanOriginationYear <- factor(year(pl$LoanOriginationDate))
+```
+
+This report explores a dataset containing loans and customer information for 
+approximately 113,000 loans from Prosper, a peer-to-peer lending marketplace.
+
+# Univariate Plots Section
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plot}
+qplot(data = pl, x = LoanOriginationYear, binwidth = 1)
+```
+
+First, looking at the years of the originated dates, we can see that the loans 
+contained in the data range from 2005 to 2014.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plot1}
+# Create standard to adjust x label to prevent overlap  
+x45 <- theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+qplot(data = pl, x = LoanOriginalAmount, binwidth = 1000) +
+  scale_x_continuous(breaks = seq(0, 40000, 2000), limits = c(0, 36000)) +
+  x45
+```
+
+Looking at the spread of the original loan amounts we see several distinct 
+spikes in loan amount around 4,000, 10,000, 15,000, and smaller spikes at 
+20,000 and 25,000. We also see most of the loan amounts clustered under 10,000, 
+which indicates to me these are more along the lines of personal loans and not 
+other types of loans like mortgages. So what are the people like who are 
+getting these loans?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plot2}
+# Plot using subset to exclude not displayed income ranges
+qplot(data = subset(pl, IncomeRange != "Not displayed"), x = IncomeRange) +
+  x45
+```
+
+Looking at the income range of the customers, we can see the majority of them 
+earn between 25,000 and 74,999.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plot3}
+qplot(data = pl, x = AverageCreditScore, binwidth = 20) +
+  scale_x_continuous(breaks = seq(0, 900, 50))
+```
+
+Looking at the average credit score, calculated by averaging the lower and upper 
+range of the customer's scores, we see that most of these loans were made to 
+people in the range of 625 to 750.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Table}
+table(pl$Occupation)
+```
+
+There is a wide variety of professions listed for these people, though most 
+fall under the generic terms of Professional or Other. So how have these loans 
+worked out for the investors who provide the funds?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=10, Univariate_Plot4}
+qplot(data = pl, x = LoanStatus) +
+  x45
+```
+
+With most being Completed or Current things seem to be going pretty well.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plot5}
+qplot(data = pl, x = EstimatedReturn, binwidth = 0.025) +
+  scale_x_continuous(breaks = seq(-0.1, 0.25, 0.05), limits = c(-0.1, 0.25))
+
+summary(pl$EstimatedReturn)
+```
+
+One of the measures of benefit to the investors presented is the 
+Estimated Return, which is the difference between the Estimated Effective Yield 
+(Interest - Service Fee - charge-offs + late fees) and the Estimated Loss Rate 
+(principal loss on charge-off). I'm surprised to find that there are loans with 
+an Estimated Return less than 0.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Table1}
+summary(pl$Investors)
+
+qplot(data = pl, x = Investors, binwidth = 10)
+```
+
+Taking a look at the summary of investors, the count of how many people 
+invested to provide the funds for the loan, we see a median of 44 which seems 
+to be more accurate than the mean due to the long tail that can be seen when 
+charting the data.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Univariate_Plot6}
+qplot(data = pl, x = MonthlyLoanPayment, binwidth = 50) +
+  scale_x_continuous(breaks = seq(0, 1500, 100), limits = c(0, 1500))
+```
+
+The most common monthly payment is around 150. I find it interesting that this 
+plot follows a similar shape to the previous loan amount, but without the 
+distinct spikes at higher values.
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+There are a total of 113,937 loans with 81 variables. Some of these are specific
+for data management, such as ListingKey, but the majority of the variables 
+contain relevant data for analysis. Of the data, the variables 
+ProsperRating..Alpha. and CreditGrade are ordered factor variables with the 
+following levels going from worst to best:
+
+1. Blank
+2. HR
+3. E
+4. D
+5. C
+6. B
+7. A
+8. AA
+
+These two variables contain the same values, but CreditGrade is only relevant to
+loans prior to 2009, and ProsperRating..Alpha. applies to loans after July 2009.
+This indicates there was a change in how they calculated ratings in 2009, but 
+they kept the same rating values.
+
+Other Observations:
+
+* There are distinct clusters of loans around 4,000, 10,000, 15,000, 20,000, 
+and 25,000 dollars
+* Most borrowers report yearly incomes between 25,000 and 74,999
+* Most borrowers have an average credit score between 625 and 750
+* The average estimated return for investors is about 9%
+* The median number of investors per loan is 44
+* Monthly payment amount follows a similar pattern to loan amount, but without 
+the distinct clusters other than the mode
+
+### What is/are the main feature(s) of interest in your dataset?
+I think the main features of the data depend on which side you are looking at 
+it from. As a borrower, the main features would be LoanOriginalAmount and 
+MonthlyLoanPayment to determine if a loan through Prosper would be competitive 
+to other options. As an investor the main features would be EstimatedReturn 
+and LoanOriginalAmount.
+
+### What other features in the dataset do you think will help support your \
+investigation into your feature(s) of interest?
+For borrowers, items such as the AverageCreditScore, DebtToIncomeRatio, 
+and ProsperScore probably contribute heavily to the terms offered. For 
+investors the items such as the ProsperScore, AverageCreditScore, and 
+DelinquenciesLast7Years are most likely good indicators of good investments.
+
+### Did you create any new variables from existing variables in the dataset?
+Yes, I created an AverageCreditScore variable, derived by averaging the 
+CreditScoreRangeLower and CreditScoreRangeUpper to create a single value for use
+ in graphing and calculations. I also created LoanOriginationYear, derived from 
+LoanOriginationDate, in order to easily graph off of the year the loan 
+originated.
+
+### Of the features you investigated, were there any unusual distributions? \
+Did you perform any operations on the data to tidy, adjust, or change the form \
+of the data? If so, why did you do this?
+The results of the LoanOriginalAmount had an unusual distribution with several 
+large clusters of values around 4,000, 10,000, 15,000, 20,000, and 25,000 
+dollars. The only data I adjusted was excluding "Not displayed" from the 
+IncomeRange graph.
+
+# Bivariate Plots Section
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot}
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount), data = pl) +
+  geom_point(alpha = 1/20)
+
+summary(lm(MonthlyLoanPayment ~ LoanOriginalAmount, data=pl))
+```
+
+There seem to be 4 main patterns of monthly payment that emerge, which I suspect
+is going to be related to the credit score of the borrowers.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot1}
+ggplot(aes(x = MonthlyLoanPayment, y = AverageCreditScore), data = pl) +
+  geom_jitter(alpha = 1/20) +
+  scale_y_continuous(breaks = seq(425, 900, 25), limits = c(400, 900))
+# Limit values to better focus the plot
+
+summary(lm(MonthlyLoanPayment ~ AverageCreditScore, data=pl))
+```
+
+We see a somewhat similar pattern emerge with the majority of the loan payments 
+clustered pretty close together up to a little beyond 500 a month, and then to 
+decreasing groupings beyond that. Credit score does seem to have an impact as 
+there are distinct steps up at specific credit score averages.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot2}
+ggplot(aes(x = LoanOriginalAmount, y = AverageCreditScore), data = pl) +
+  geom_jitter(alpha = 1/20) +
+  scale_y_continuous(breaks = seq(425, 900, 25), limits = c(400, 900))
+# Follow the same limits as previous plot for consistency
+
+summary(lm(LoanOriginalAmount ~ AverageCreditScore, data=pl))
+```
+
+The groupings here are a bit less pronounced, but that matches what we saw 
+previously where the main gap between the two lines happened after the 25,000 
+loan amount. So how does the Prosper Score compare to the average credit score?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot3}
+# Subset of data to exclude records without Prosper score
+ggplot(aes(x = ProsperScore, y = AverageCreditScore),
+       data = subset(pl, ProsperScore != "NA")) +
+  geom_boxplot()
+
+summary(lm(AverageCreditScore ~ ProsperScore, data=pl))
+```
+
+For the most part this matches what I expected, with average scores increasing
+as Prosper Score increases, but I'm surprised by the dip at 11 which is the 
+highest score. Perhaps previous delinquencies have an impact on the score.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot4}
+ggplot(aes(x = ProsperScore, y = DelinquenciesLast7Years), 
+       data = subset(pl, ProsperScore != "NA")) +
+  geom_jitter(alpha = 1/50)
+
+ggplot(aes(x = ProsperScore, y = DelinquenciesLast7Years), 
+       data = subset(pl, ProsperScore != "NA")) +
+  geom_boxplot()
+```
+
+We do see a distinctly smaller amount of delinquencies among those with a score 
+of 11. Another item that may have a large impact would be the debt to income
+ratio.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot5}
+ggplot(aes(x = ProsperScore, y = DebtToIncomeRatio), 
+       data = subset(pl, ProsperScore != "NA")) +
+  geom_boxplot() +
+  scale_y_continuous()
+
+ggplot(aes(x = ProsperScore, y = DebtToIncomeRatio), 
+       data = subset(pl, ProsperScore != "NA")) +
+  geom_boxplot() +
+# Limit y scale to better see variation in values
+  scale_y_continuous(breaks = seq(0, 1, 0.05), limits = c(0, 1))
+
+summary(lm(DebtToIncomeRatio ~ ProsperScore, data=pl))
+```
+
+Again, we see a distinct decrease in debt to income ratio as the Prosper Score 
+increases though again we see a slight variation when it comes to the 11 score. 
+One question I have is if there is a reliable relationship between the debt to 
+income ratio and the amount of delinquencies?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot6}
+ggplot(aes(x = DebtToIncomeRatio, y = DelinquenciesLast7Years), 
+       data = pl) +
+  geom_jitter(alpha = 1/20) +
+# Follow limitation from previous plot for consistency
+  scale_x_continuous(breaks = seq(0, 1.0, 0.05), limits = c(0, 1.0))
+
+summary(lm(DebtToIncomeRatio ~ DelinquenciesLast7Years, data=pl))
+```
+
+This honestly surprises me. I would expect a higher dept to income ratio to have
+ a higher number of delinquencies. While we do slightly see that trend at first 
+it reverses at around 15%.
+
+Clearly a lot of different items contribute to the Prosper score. So how good is
+it in confirming to investors the estimated return?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot7}
+ggplot(aes(x = ProsperScore, y = EstimatedReturn), 
+       data = subset(pl, ProsperScore != "NA")) +
+  geom_boxplot() +
+# Focus plot view on most relevant values
+  scale_y_continuous(breaks = seq(0, 0.30, 0.01), limits = c(0, 0.3))
+
+summary(lm(EstimatedReturn ~ ProsperScore, data=pl))
+```
+
+Surprisingly the estimated return trends downward as prosper score increases 
+past 6. Maybe this is because higher scores have higher loan amounts on average?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Bivariate_Plot8}
+ggplot(aes(x = ProsperScore, y = LoanOriginalAmount),
+       data = subset(pl, ProsperScore != "NA")) +
+         geom_boxplot()
+
+summary(lm(LoanOriginalAmount ~ ProsperScore, data=pl))
+```
+
+We do see a rough trend that direction, so while high prosper scores may have 
+lower estimated returns the overall return could be greater due to the larger 
+amount of money. Finally, for a bit of fun, let's take a look at what the loan 
+amount is by state.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=8, fig.width=8, Bivariate_Plot9}
+qplot(x = LoanOriginalAmount, data = pl, binwidth = 2500) +
+  scale_x_continuous(breaks = seq(0, 40000, 10000), limits = c(0, 36000)) +
+  facet_wrap(~BorrowerState, ncol = 6) +
+  x45
+```
+
+We can see that for the most part the individual states follow the same trend 
+we saw in the overall graph earlier, though there are significantly more from 
+California.
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features in \
+the dataset?
+There is a strong correlation between MonthlyLoanPayment and LoanOriginalAmount 
+with MonthlyLoanPayment increasing as LoanOriginalAmount increases.
+
+There are clear ceilings of LoanOriginalAmount in relation to AvergeCreditScore 
+where a higher AverageCreditScore allows access to higher LoanOriginalAmounts.
+
+There is a similar pattern between MonthlyLoanPayment and AverageCreditScore 
+most likely due to higher LoanOriginalAmounts resulting in higher 
+MonthlyLoanPayments.
+
+There is some relationship between ProsperScore and AverageCreditScore, but the 
+trend drops at the top ProsperScore of 11 which has a lower mean than a score 
+of 10.
+
+The majority of borrowers have low to 0 DelinquenciesLast7Years, but by looking 
+at the chart there is a clear trend in declining delinquencies with higher 
+ProsperScores.
+
+The relationship between ProsperScore and DebtToIncomeRatio is similar to the 
+relationship seen between ProsperScore and AverageCreditScore. Overall the 
+DebtToIncomeRatio decreases as ProsperScore increases, but it goes back up at 
+a ProsperScore of 11.
+
+Surprisingly the relationship between DebtToIncomeRatio and 
+DelinquenciesLast7Years is not what I expected. The number of 
+DelinquenciesLast7Years increases going from a DebtToIncomeRatio of 0 to 0.15, 
+but then it goes down and only slightly increases as the DebtToIncomeRatio 
+approaches 1.
+
+The EstimatedReturn decreases as the ProsperScore increases which is possibly 
+due to them being lower risk investments
+
+Similar to AverageCreditScore we see a general increase in OriginalLoanAmount 
+as the ProsperScore increases.
+
+There did not appear to be any relationship between BorrowerState and 
+OrigilLoanAmount as each state appears to follow the same basic pattern as the 
+overall data. There is a significantly larger amount of loans made to borrowers 
+in California, but those numbers follow the same pattern.
+
+### Did you observe any interesting relationships between the other features \
+(not the main feature(s) of interest)?
+The most interesting relationship to me was the one between DebtToIncomeRatio 
+and DelinquenciesLast7Years. I expected it to be a simple increasing trend as 
+a higher ratio would make repaying debts more difficult and thus more 
+delinquencies, but it appears that after a certain point those that maintain a 
+high ratio also manage their finances well and so do not fall behind on debt 
+payments.
+
+### What was the strongest relationship you found?
+The strongest relationship I found was the relationship between 
+MonthlyLoanPayment and LoanOriginalAmount with an adjusted r-squared value of 
+0.8686. This makes sense as the more money you borrow the higher the payments, 
+and it shows that there is still some influence from other factors like 
+AverageCreditScore and ProsperScore.
+
+# Multivariate Plots Section
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Multivariate_Plots}
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = ProsperScore), data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_brewer(type = 'seq', palette = 'RdYlBu')
+
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = AverageCreditScore), 
+       data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_gradient(low = 'red', high = 'blue', 
+                       breaks = seq(400, 900, 100), limits = c(400, 900))
+
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = LoanOriginationYear), data = subset(pl, 
+                                                       ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_brewer(type = 'seq', palette = 'Blues')
+
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = BorrowerAPR), data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_gradient(low = 'blue', high = 'red')
+
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = EstimatedReturn), data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_gradient(low = 'red', high = 'blue', breaks = seq(0, 0.30, 0.05), 
+                       limits = c(0, 0.3))
+
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = TotalProsperLoans), data = subset(pl, 
+                                                     ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_gradient(low = 'red', high = 'blue')
+
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = Term), data = subset(pl, 
+                                                     ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_brewer(type = 'seq', palette = 'RdYlGn')
+```
+
+I really wanted to try and determine what could be the source of the three 
+distinct groupings when comparing monthly loan payment to the loan original 
+amount. I worked my way through the variables I though to most likely be 
+contributing to this pattern, going through Prosper score, average credit score 
+loan origination year, APR, estimated return, total Prosper loans, and finally 
+finding that the length of term for the loan matched the pattern with each 
+section corresponding to one of the three term lengths (12, 36, and 60). There 
+were some additional strong relationships shown with the estimated return 
+APR but both were within the three sections established by the length of term. 
+So with this information we can do a new facet wrapped set of plots to get a 
+better view of how Prosper score matches the range of loan amount to monthly 
+payment.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=8, Multivariate_Plots1}
+ggplot(aes(x = MonthlyLoanPayment, y = LoanOriginalAmount, 
+           color = ProsperScore), data = subset(pl, ProsperScore != "NA")) +
+  geom_point() +
+  scale_color_brewer(type = 'seq', palette = 'RdYlBu') +
+  facet_wrap(~Term, ncol = 1)
+```
+
+This leads to data that looks like an excellent fit for a linear model, so I 
+went through that process.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, LinearModel}
+lm1 <- lm(I(LoanOriginalAmount) ~ I(MonthlyLoanPayment),
+          data = subset(pl, ProsperScore != "NA"))
+lm2 <- update(lm1, ~ . + Term)
+lm3 <- update(lm2, ~ . + ProsperScore)
+mtable(lm1, lm2, lm3)
+```
+
+Another exploration I wanted to delve further into was the relation between 
+the Prosper score of the borrower and the amount of money estimated as a return 
+for the lender. Previously I had noted that the estimated return was lower for 
+those with higher Prosper scores, and theorized that this would be offset by 
+a higher loan amount and thus more money returned.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Multivariate_Plots2}
+ggplot(aes(x = ProsperScore, y = LoanOriginalAmount * EstimatedReturn),
+       data = subset(pl, ProsperScore != "NA")) +
+         geom_boxplot() +
+# Limit scale to exclude extreem outliers
+  scale_y_continuous(breaks = seq(-2000, 4000, 500), limits = c(-2000, 4000))
+```
+
+The differences between estimated and return and loan amount combine to make a 
+more balanced range of the estimated amount of money an investor should expect 
+back. There is still a bit of a trend that can be seen for mid range Prosper 
+socores where it looks like the highest return amount is usually seen when 
+investing on loans with a Prosper Score between 4 to 8 or 11. With this I would 
+expect to see a pretty solid relationship between amount invested and estimated 
+return for each individual investor.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Multivariate_Plots3}
+ggplot(aes(x = (LoanOriginalAmount/Investors), 
+           y = ((LoanOriginalAmount * EstimatedReturn)/Investors), 
+           color = Term),
+           data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .3) +
+  scale_color_brewer(type = 'seq', palette = 'RdYlGn')
+
+ggplot(aes(x = (LoanOriginalAmount/Investors), 
+           y = ((LoanOriginalAmount * EstimatedReturn)/Investors), 
+           color = ProsperScore),
+           data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .3) +
+  scale_color_brewer(type = 'seq', palette = 'RdYlBu')
+
+ggplot(aes(x = (LoanOriginalAmount/Investors), 
+           y = ((LoanOriginalAmount * EstimatedReturn)/Investors), 
+           color = Term),
+           data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .5) +
+  scale_color_brewer(type = 'seq', palette = 'RdYlGn') +
+  facet_wrap(~ProsperScore, ncol = 3)
+```
+
+The initial plot showed a pretty strong relationship, but there is also a 
+pattern that could indicate another influencing factor. After comparing against 
+both term and Prosper score the pattern seems to be pretty clearly due to 
+Prosper score with smaller influence from term. Again this final data looks like
+a good fit for a linear model.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, LinearModel2}
+lm4 <- lm(I((LoanOriginalAmount * EstimatedReturn)/Investors) ~ 
+            I(LoanOriginalAmount/Investors), 
+          data = subset(pl, ProsperScore != "NA"))
+lm5 <- update(lm4, ~ . + Term)
+lm6 <- update(lm5, ~ . + ProsperScore)
+mtable(lm4, lm5, lm6)
+```
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the \
+investigation. Were there features that strengthened each other in terms of \
+looking at your feature(s) of interest?
+While there was already a pretty strong relationship seen between 
+LoanOriginalAmount and MonthlyLoanPayment in our previous analysis by using a 
+facet wrap on Term and displaying colors by ProsperScore we get a cleaner and 
+more structured result.
+
+By combining EstimatedReturn and LoanOriginalAmount we can calculate the value 
+in dollars of the EstimatedReturn. We see two distinct groups of values with 
+ProsperScores 1-3 having low values due to a significant amount of loans with 
+negative EstimatedReturn, and 4-11 having roughly even values. The pattern 
+becomes more significant after including the value of the OriginalLoanAmount, 
+not just the percentage return of it, showing an increasing trend that explains 
+the difference between the EstimatedReturn and the calculated value of the 
+return.
+
+By further dividing the previous data by Investors we can find what an 
+individual investor could expect to receive back depending on how much they 
+invest. By further refining with ProsperScore and Term we see a very tight 
+relationship outside of a few outliers.
+
+### Were there any interesting or surprising interactions between features?
+Of all the variables that influence the shape of the relationship between 
+LoanOriginalAmount and MonthlyLoanPayment I was surprised to find that Term had 
+the largest impact on the pattern. In hindsight it makes sense due to the 
+limited range of Terms offered, as my assumption had been that they was much 
+more variation in the values.
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the \
+strengths and limitations of your model.
+Yes I created two models: one for the relationship between LoanOriginalAmount 
+and MonthlyLoanPayment, and the other for the relationship between the per 
+Investor return against the original cost.
+
+For the model on LoanOriginalAmount and MonthlyLoanPayment it greatly benefited 
+from the addition of Term, going from a r-squared value of 0.840 to 0.927. The 
+inclusion of ProsperScore increased the r-squared value only slightly.
+
+For the model between per Investor return (LoanOriginalAmount * 
+EstimatedReturn)/Investors) and loaned amount (LoanOriginalAmount/Investors) the
+initial comparison was strong with a r-squared value of 0.952. Adding 
+ProsperScore and Term mildly increased the r-squared value.
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, message=FALSE, warning=FALSE, Plot_One}
+ggplot(aes(x = ProsperScore, y = AverageCreditScore, fill = ProsperScore),
+       data = subset(pl, ProsperScore != "NA")) +
+  scale_color_brewer(aesthetics = "fill", type = 'div', 
+                     guide = guide_legend(title = 'Prosper Score'), 
+                     palette = 'RdYlGn') +
+  scale_y_continuous(breaks = seq(600, 900, 20)) +
+  geom_boxplot() +
+  labs(title = 'Average Credit Score by Prosper Score', 
+       x = 'Prosper Score', y = 'Average Credit Score')
+```
+
+### Description One
+This plot gives a good summary of where a credit score could land a borrower on 
+the Prosper score scale with higher credit scores generally leading to a higher 
+Prosper score, but there are some additional factors that come into play as seen
+ by the lower but tighter grouping of credit scores for those with a Prosper 
+score of 11 which is the highest.
+
+### Plot Two
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.height=6, Plot_Two}
+ggplot(aes(x = LoanOriginalAmount, y = MonthlyLoanPayment, 
+           color = ProsperScore), 
+       data = subset(subset(pl, ProsperScore != 'NA'),
+                     MonthlyLoanPayment != 0)) +
+  scale_x_continuous(breaks = seq(0, 36000, 2000)) +
+  geom_point(alpha = .3) +
+  scale_color_brewer(type = 'div', 
+                     guide = guide_legend(title = 'Prosper Score', 
+                                    override.aes = list(alpha = 1, size = 2)),
+                     palette = 'RdYlBu') +
+  facet_wrap(~Term, ncol = 1) +
+  labs(title = 'Monthly Payment by Loan Amount Faceted by Term in Months', 
+       x = 'Loan Amount in Dollars', y = 'Monthly Payment in Dollars')
+```
+
+### Description Two
+This plot shows the relationship between the monthly payment amount and the 
+original borrowed amount in dollars along with the influence caused by the term 
+of the loan along with the borrowers Prosper score. A long term and high Prosper
+score result in the lowest payment amounts for a loan, and certain loan amounts 
+are not available depending on the term of the loan.
+
+### Plot Three
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=10, Plot_Three}
+ggplot(aes(x = (LoanOriginalAmount/Investors), 
+           y = ((LoanOriginalAmount * EstimatedReturn)/Investors), 
+           color = ProsperScore),
+           data = subset(pl, ProsperScore != "NA")) +
+  geom_point(alpha = .3) +
+  scale_x_continuous(breaks = seq(0, 36000, 2000)) +
+  scale_color_brewer(type = 'div', 
+                     guide = guide_legend(title = 'Prosper Score', 
+                                    override.aes = list(alpha = 1, size = 2)),
+                     palette = 'RdYlGn') +
+  labs(title = 'Estimated Individual Return by Individual Investment', 
+       x = 'Initial Investment in Dollars',
+       y = 'Estimated Individual Return in Dollars')
+```
+
+### Description Three
+This plot shows the relationship between the calculated values for estimated 
+individual return and the initial investment in dollars along with the influence
+of the borrower's Prosper score on the result. This shows that safer 
+investments, those with high Prosper scores, have a lower return rate and 
+require a higher initial investment to have the same estimated return. In 
+addition the highest estimated individual returns can only be seen with loans to
+those with high Prosper scores.
+
+------
+
+# Reflection
+With over 100 thousand records and 83 variables there was plenty of data to 
+explore in the Prosper Loan set. After getting to know the variables I decided 
+to approach the exploration from both the view of a borrower and a investor. I 
+determined each view would have their own points of interest like determining 
+the likely monthly loan payments for borrowers or analysis to suggest good 
+investments for investors.
+
+While exploring the data there were a couple difficulties I cam across. First 
+was the large amount of variables which made it difficult at times to determine 
+which variables would be worthwhile or relevant to explore. A good example of 
+this was in my exploration of the relationship between loan amount and monthly 
+payment amount. I could see there was another factor involved based on the plot 
+but it took me a good amount of work to find the variable.
+
+My second struggle was due to the range of the data. Part way through I found 
+that there was a distinct split in the data around July 2009. After some 
+exploration I found that most of the data was focused after this date, and so 
+I filtered a lot of my explorations to exclude null values caused by this split 
+and focus on those values after July 2009.
+
+I feel my best success was in exploring the relationship between initial loan 
+amount and monthly loan payment. By determining that the grouping I first 
+noticed was caused by the term of the loan I was able to create a linear model 
+for the data with an r-squared value of 0.939 which was a significant 
+improvement of the value when just comparing the two base variables.
+
+For future analysis I think more analysis and data could be gathered to better 
+model not only expected returns but include actual returns for the loans. This 
+could in turn be used to provide analysis of borrowers risk and return to 
+possibly allow investors to better understand the likely result of lending to 
+certain borrowers.
